@@ -11,7 +11,10 @@ Comandos
 Puedes responder con:
 Verdadero, Falso
 verdadero, falso
+True, False
+true, false
 v   f  
+
 
 
 Lo que el bot hace es, te pregunta distintos mitos sobre el cambio climatico y tu tiene que decir si es falso o verdadero, te dira si es correcto o no y cuando acabas te dice:
