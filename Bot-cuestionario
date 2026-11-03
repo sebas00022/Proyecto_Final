@@ -1,0 +1,178 @@
+import discord
+from discord.ext import commands
+import asyncio
+import json
+import os
+import unicodedata
+
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+ARCHIVO_PUNTAJES = "puntajes.json"
+
+def cargar_puntajes():
+    if os.path.exists(ARCHIVO_PUNTAJES):
+        with open(ARCHIVO_PUNTAJES, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def guardar_puntajes(puntajes):
+    with open(ARCHIVO_PUNTAJES, "w", encoding="utf-8") as f:
+        json.dump(puntajes, f, indent=4)
+
+def normalizar(texto):
+    texto = texto.lower().strip()
+    texto = unicodedata.normalize("NFD", texto)
+    texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    return texto
+
+preguntas = [
+    {
+        "pregunta": "El cambio climático actual es causado principalmente por la actividad humana.",
+        "correcta": True,
+        "consejo": "El calentamiento actual está impulsado sobre todo por la quema de combustibles fósiles."
+    },
+    {
+        "pregunta": "El plástico se descompone completamente en menos de 20 años.",
+        "correcta": False,
+        "consejo": "La mayoría de plásticos tardan cientos de años en degradarse."
+    },
+    {
+        "pregunta": "Separar la basura orgánica ayuda a reducir la emisión de metano en los rellenos sanitarios.",
+        "correcta": True,
+        "consejo": "La materia orgánica sin oxígeno genera metano, un gas de efecto invernadero muy potente."
+    },
+    {
+        "pregunta": "El dióxido de carbono es el único gas que produce efecto invernadero.",
+        "correcta": False,
+        "consejo": "También existen el metano, el óxido nitroso y los gases fluorados."
+    },
+    {
+        "pregunta": "Reciclar una lata de aluminio ahorra mucha más energía que fabricar una nueva.",
+        "correcta": True,
+        "consejo": "Reciclar aluminio puede ahorrar hasta un 95% de la energía."
+    },
+    {
+        "pregunta": "El cambio climático solo afecta a los polos y a los glaciares.",
+        "correcta": False,
+        "consejo": "Afecta a todo el planeta con olas de calor, sequías y eventos extremos."
+    },
+    {
+        "pregunta": "Los residuos peligrosos se pueden tirar en la basura normal.",
+        "correcta": False,
+        "consejo": "Deben llevarse a puntos limpios o recolección especial."
+    },
+    {
+        "pregunta": "Plantar árboles ayuda a combatir el cambio climático porque absorben CO2.",
+        "correcta": True,
+        "consejo": "Los árboles capturan dióxido de carbono y lo almacenan."
+    },
+    {
+        "pregunta": "El clima y el tiempo meteorológico son lo mismo.",
+        "correcta": False,
+        "consejo": "El tiempo es lo inmediato. El clima es el promedio de muchos años."
+    },
+    {
+        "pregunta": "Usar transporte público o bicicleta ayuda a reducir las emisiones.",
+        "correcta": True,
+        "consejo": "El transporte es una de las principales fuentes de emisiones."
+    },
+    {
+        "pregunta": "Todo el plástico del contenedor de reciclaje se recicla realmente.",
+        "correcta": False,
+        "consejo": "Solo una parte se recicla. Lo mejor es reducir el consumo."
+    },
+    {
+        "pregunta": "El nivel del mar está subiendo por el derretimiento de glaciares y el calentamiento del agua.",
+        "correcta": True,
+        "consejo": "El agua caliente se expande y se suma el agua de los glaciares."
+    },
+    {
+        "pregunta": "La basura electrónica no es peligrosa para el medio ambiente.",
+        "correcta": False,
+        "consejo": "Contiene metales pesados y sustancias tóxicas."
+    },
+    {
+        "pregunta": "Reducir el consumo de carne puede ayudar a disminuir las emisiones.",
+        "correcta": True,
+        "consejo": "La ganadería genera mucho metano y usa mucha tierra y agua."
+    },
+    {
+        "pregunta": "El cambio climático solo afectará a las generaciones futuras.",
+        "correcta": False,
+        "consejo": "Ya estamos viviendo sus efectos actualmente."
+    }
+]
+
+@bot.event
+async def on_ready():
+    print(f"Bot conectado como {bot.user}")
+
+@bot.command()
+async def start(ctx):
+    await ctx.send(
+        f"**Cuestionario de Cambio Climático**\n"
+        f"Hola {ctx.author.mention}, son 15 preguntas de verdadero o falso.\n"
+        f"Responde con: verdadero, falso, v o f."
+    )
+
+    puntaje = 0
+    falladas = []
+
+    for i, pregunta in enumerate(preguntas, 1):
+        await ctx.send(f"**Pregunta {i}/15**\n{pregunta['pregunta']}")
+
+        def check(mensaje):
+            return (
+                mensaje.author == ctx.author
+                and mensaje.channel == ctx.channel
+                and normalizar(mensaje.content) in ["verdadero", "falso", "v", "f", "true", "false"]
+            )
+
+        try:
+            respuesta_msg = await bot.wait_for("message", check=check, timeout=60.0)
+            respuesta = normalizar(respuesta_msg.content)
+            es_verdadero = respuesta in ["verdadero", "v", "true"]
+
+            if es_verdadero == pregunta["correcta"]:
+                puntaje += 1
+                await ctx.send("Correcto.")
+            else:
+                falladas.append(pregunta)
+                await ctx.send("Incorrecto.")
+
+        except asyncio.TimeoutError:
+            await ctx.send("Tiempo agotado. Cuestionario cancelado.")
+            return
+
+    puntajes = cargar_puntajes()
+    user_id = str(ctx.author.id)
+    puntaje_anterior = puntajes.get(user_id, 0)
+
+    if puntaje > puntaje_anterior:
+        puntajes[user_id] = puntaje
+        guardar_puntajes(puntajes)
+        await ctx.send(f"Resultado: {puntaje}/15\nNuevo record personal.")
+    else:
+        await ctx.send(f"Resultado: {puntaje}/15\nTu mejor puntaje es {puntaje_anterior}/15.")
+
+    if falladas:
+        await ctx.send("Consejos de las preguntas que fallaste:")
+        for fallada in falladas:
+            await ctx.send(f"- {fallada['pregunta']}\n  {fallada['consejo']}")
+    else:
+        await ctx.send("No fallaste ninguna pregunta.")
+
+@bot.command()
+async def puntaje(ctx):
+    puntajes = cargar_puntajes()
+    user_id = str(ctx.author.id)
+    mejor = puntajes.get(user_id)
+
+    if mejor is None:
+        await ctx.send(f"{ctx.author.mention} aun no has hecho el cuestionario. Usa !start")
+    else:
+        await ctx.send(f"{ctx.author.mention} tu mejor puntaje es {mejor}/15")
+
+bot.run("Tu token")
